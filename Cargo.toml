@@ -1,0 +1,7 @@
+[workspace]
+members = ["day*"]
+
+resolver = "2"
+
+[workspace.dependencies]
+nom = "7.1.3"
