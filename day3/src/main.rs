@@ -73,13 +73,48 @@ fn neighbours_of_range<F>(lines: &Vec<&str>, row: usize, range: &Range<usize>, p
     return false;
 }
 
-fn char_at(row: usize, col: usize, lines: &Vec<&str>) -> char {
-    let line = lines[row];
-    line.chars().nth(col).unwrap()
+fn part2(input: &str) -> i32 {
+    let numbers: Vec<Vec<(i32, Range<usize>)>> = input.lines().map(number_with_range).collect();
+    input.lines().enumerate().map(|(row, line)| {
+        line.chars().enumerate().filter_map(|(col, c)| {
+            if c == '*' {
+                find_gear_ratio(row, col, &numbers)
+            } else {
+                None
+            }
+        }).sum::<i32>()
+    }).sum()
 }
 
-fn part2(input: &str) -> i32 {
-    0
+fn find_gear_ratio(row: usize, col: usize, numbers: &Vec<Vec<(i32, Range<usize>)>>) -> Option<i32> {
+    let left = col - 1;
+    let right = col + 1;
+    let mut target_rows = Vec::new();
+    if row > 0 {
+        target_rows.push(row - 1);
+    }
+    target_rows.push(row);
+    if row < numbers.len() - 1 {
+        target_rows.push(row + 1);
+    }
+    // dbg!(row, col, &target_rows, left, right);
+
+    let part_numbers: Vec<i32> = target_rows.iter().flat_map(|&row| {
+        numbers[row].iter().filter_map(|(number, range)| {
+            // dbg!(number, range.start, range.end, range.start <= right && range.end > left);
+            if range.start <= right && range.end > left {
+                Some(*number)
+            } else {
+                None
+            }
+        })
+    }).collect();
+
+    if part_numbers.len() == 2 {
+        Some(part_numbers[0] * part_numbers[1])
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -100,5 +135,21 @@ mod tests {
 ...$.*....
 .664.598..";
         assert_eq!(part1(input), 4361);
+    }
+
+    #[test]
+    fn test_part2() {
+        let input =
+"467..114..
+...*......
+..35..633.
+......#...
+617*......
+.....+.58.
+..592.....
+......755.
+...$.*....
+.664.598..";
+        assert_eq!(part2(input), 467835);
     }
 }
