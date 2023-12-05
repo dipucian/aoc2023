@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::ops::Range;
 
 fn main() {
     let input = include_str!("input.txt");
@@ -14,6 +15,13 @@ pub struct Card {
     id: i32,
     winning: HashSet<i32>,
     present: Vec<i32>,
+}
+
+impl Card {
+    fn match_count(&self) -> usize {
+        let present = self.present.iter().cloned().collect::<HashSet<_>>();
+        self.winning.intersection(&present).count()
+    }
 }
 
 mod parsing {
@@ -54,14 +62,43 @@ mod parsing {
 
 fn part1(input: &Vec<Card>) -> i32 {
     input.iter().map(|card| {
-        let present = card.present.iter().cloned().collect::<HashSet<_>>();
-        let matched = card.winning.intersection(&present).count();
+        let matched = card.match_count();
         if matched > 0 {
             2_i32.pow((matched - 1) as u32)
         } else { 0 }
     }).sum()
 }
 
-fn part2(_input: &Vec<Card>) -> i32 {
-    0
+// Vec<Card> -> Vec<Range<usize>> -> fold((1, Vec::new<Range<usize>>())) to Vec<(i32, Range<usize>)>
+
+fn part2(input: &Vec<Card>) -> i32 {
+    let mut card_copies: Vec<i32> = input.iter().map(|_| 1).collect();
+    let ranges: Vec<_> = input.iter().enumerate()
+        .map(|(idx, card)| (idx+1)..(idx+card.match_count()+1))
+        .collect();
+    ranges.iter().enumerate()
+        .for_each(|(idx, r)| {
+            let copies = card_copies[idx];
+            card_copies[r.to_owned()].iter_mut().for_each(|c| *c += copies)
+        });
+    card_copies.iter().sum()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_part2() {
+        let input =
+            "Card 1: 41 48 83 86 17 | 83 86  6 31 17  9 48 53
+Card 2: 13 32 20 16 61 | 61 30 68 82 17 32 24 19
+Card 3:  1 21 53 59 44 | 69 82 63 72 16 21 14  1
+Card 4: 41 92 73 84 69 | 59 84 76 51 58  5 54 83
+Card 5: 87 83 26 28 32 | 88 30 70 12 93 22 82 36
+Card 6: 31 18 13 56 72 | 74 77 10 23 35 67 36 11";
+
+        let result = part2(&input.lines().map(|line| parsing::parse_card(line).unwrap().1).collect());
+        assert_eq!(result, 30);
+    }
 }
