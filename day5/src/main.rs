@@ -3,10 +3,10 @@ fn main() {
 
     let almanac = parsing::parse_almanac(input).unwrap().1;
 
-    dbg!(almanac);
+    dbg!(&almanac);
 
-    // println!("part1: {}", part1(data));
-    // println!("part2: {}", part2(data));
+    println!("part1: {}", part1(&almanac));
+    println!("part2: {}", part2(&almanac));
 }
 
 #[derive(Debug, PartialEq)]
@@ -22,11 +22,61 @@ pub struct Mapping {
     sections: Vec<Section>
 }
 
+impl Mapping {
+    fn apply(&self, value: u32) -> u32 {
+        for section in &self.sections {
+            if value >= section.source_start && value < section.source_start + section.size {
+                return section.destination_start + (value - section.source_start)
+            }
+        }
+        return value
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Section {
     destination_start: u32,
     source_start: u32,
     size: u32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_part1() {
+        let input = include_str!("testcase1.txt");
+        let almanac = parsing::parse_almanac(input).unwrap().1;
+        assert_eq!(part1(&almanac), 35);
+    }
+
+    #[test]
+    fn test_mapping() {
+        let input = include_str!("testcase1.txt");
+        let almanac = parsing::parse_almanac(input).unwrap().1;
+        let seed_to_soil = almanac.mappings.iter().find(|mapping| mapping.from == "seed").unwrap();
+
+        assert_eq!(seed_to_soil.apply(79), 81);
+        assert_eq!(seed_to_soil.apply(14), 14);
+        assert_eq!(seed_to_soil.apply(55), 57);
+        assert_eq!(seed_to_soil.apply(13), 13);
+
+        assert_eq!(seed_to_soil.apply(0), 0);
+        assert_eq!(seed_to_soil.apply(50), 52);
+        assert_eq!(seed_to_soil.apply(51), 53);
+        assert_eq!(seed_to_soil.apply(96), 98);
+        assert_eq!(seed_to_soil.apply(98), 50);
+        assert_eq!(seed_to_soil.apply(99), 51);
+    }
+}
+
+fn part1(_almanac: &Almanac) -> u32 {
+    0
+}
+
+fn part2(_almanac: &Almanac) -> u32 {
+    0
 }
 
 mod parsing {
@@ -43,7 +93,7 @@ mod parsing {
 
     fn parse_section(input: &str) -> IResult<&str, Section> {
         separated_list1(space1, u32)(input)
-            .map(|(remaining, section)| (remaining, Section { source_start: section[0], destination_start: section[1], size: section[2] }))
+            .map(|(remaining, section)| (remaining, Section { destination_start: section[0], source_start: section[1], size: section[2] }))
     }
 
     fn parse_map_heading(input: &str) -> IResult<&str, (&str, &str)> {
@@ -76,19 +126,19 @@ mod parsing {
 
         #[test]
         fn test_parse_section() {
-            let input = "0 0 1";
-            assert_eq!(parse_section(input), Ok(("", Section { destination_start: 0, source_start: 0, size: 1 })));
+            let input = "0 1 2";
+            assert_eq!(parse_section(input), Ok(("", Section { destination_start: 0, source_start: 1, size: 2 })));
         }
 
         #[test]
         fn test_parse_mapping() {
-            let input = "A-to-B map:\n0 0 1\n1 1 2";
+            let input = "A-to-B map:\n50 98 2\n52 50 48";
             assert_eq!(parse_mapping(input), Ok(("", Mapping {
                 from: "A".to_string(),
                 to: "B".to_string(),
                 sections: vec![
-                    Section { destination_start: 0, source_start: 0, size: 1 },
-                    Section { destination_start: 1, source_start: 1, size: 2 },
+                    Section { destination_start: 50, source_start: 98, size: 2 },
+                    Section { destination_start: 52, source_start: 50, size: 48 },
                 ]
             })));
         }
