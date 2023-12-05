@@ -3,16 +3,27 @@ fn main() {
 
     let almanac = parsing::parse_almanac(input).unwrap().1;
 
-    dbg!(&almanac);
-
     println!("part1: {}", part1(&almanac));
     println!("part2: {}", part2(&almanac));
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Almanac {
-    seeds: Vec<u32>,
+    seeds: Vec<i64>,
     mappings: Vec<Mapping>
+}
+
+impl Almanac {
+    fn chain_lookup(&self, from: &str, value: i64, to: &str) -> i64 {
+        let mut current_value = value;
+        let mut current_type = from;
+        while current_type != to {
+            let mapping = self.mappings.iter().find(|mapping| mapping.from == current_type).unwrap();
+            current_value = mapping.apply(current_value);
+            current_type = &mapping.to;
+        }
+        current_value
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -23,7 +34,7 @@ pub struct Mapping {
 }
 
 impl Mapping {
-    fn apply(&self, value: u32) -> u32 {
+    fn apply(&self, value: i64) -> i64 {
         for section in &self.sections {
             if value >= section.source_start && value < section.source_start + section.size {
                 return section.destination_start + (value - section.source_start)
@@ -35,9 +46,9 @@ impl Mapping {
 
 #[derive(Debug, PartialEq)]
 pub struct Section {
-    destination_start: u32,
-    source_start: u32,
-    size: u32
+    destination_start: i64,
+    source_start: i64,
+    size: i64
 }
 
 #[cfg(test)]
@@ -69,30 +80,44 @@ mod tests {
         assert_eq!(seed_to_soil.apply(98), 50);
         assert_eq!(seed_to_soil.apply(99), 51);
     }
+
+    #[test]
+    fn test_chain_lookup() {
+        let input = include_str!("testcase1.txt");
+        let almanac = parsing::parse_almanac(input).unwrap().1;
+
+        assert_eq!(almanac.chain_lookup("seed", 79, "location"), 82);
+        assert_eq!(almanac.chain_lookup("seed", 14, "location"), 43);
+        assert_eq!(almanac.chain_lookup("seed", 55, "location"), 86);
+        assert_eq!(almanac.chain_lookup("seed", 13, "location"), 35);
+    }
 }
 
-fn part1(_almanac: &Almanac) -> u32 {
-    0
+fn part1(almanac: &Almanac) -> i64 {
+    almanac
+        .seeds.iter()
+        .map(|&seed| almanac.chain_lookup("seed", seed, "location"))
+        .min().unwrap()
 }
 
-fn part2(_almanac: &Almanac) -> u32 {
+fn part2(_almanac: &Almanac) -> i64 {
     0
 }
 
 mod parsing {
     use super::*;
     use nom::bytes::complete::tag;
-    use nom::character::complete::{alpha1, space1, u32};
+    use nom::character::complete::{alpha1, space1, i64};
     use nom::IResult;
     use nom::multi::separated_list1;
     use nom::sequence::{preceded, separated_pair, terminated};
 
-    fn parse_seeds(input: &str) -> IResult<&str, Vec<u32>> {
-        preceded(tag("seeds: "), separated_list1(tag(" "), u32))(input)
+    fn parse_seeds(input: &str) -> IResult<&str, Vec<i64>> {
+        preceded(tag("seeds: "), separated_list1(tag(" "), i64))(input)
     }
 
     fn parse_section(input: &str) -> IResult<&str, Section> {
-        separated_list1(space1, u32)(input)
+        separated_list1(space1, i64)(input)
             .map(|(remaining, section)| (remaining, Section { destination_start: section[0], source_start: section[1], size: section[2] }))
     }
 
