@@ -91,6 +91,12 @@ mod tests {
         assert_eq!(almanac.chain_lookup("seed", 55, "location"), 86);
         assert_eq!(almanac.chain_lookup("seed", 13, "location"), 35);
     }
+
+    #[test]
+    fn test_window() {
+        let arr = [1, 2, 3, 4];
+        assert_eq!(arr.windows(2).step_by(2).collect::<Vec<_>>(), vec![&[1, 2], &[3, 4]]);
+    }
 }
 
 fn part1(almanac: &Almanac) -> i64 {
@@ -100,11 +106,29 @@ fn part1(almanac: &Almanac) -> i64 {
         .min().unwrap()
 }
 
-fn part2(_almanac: &Almanac) -> i64 {
-    0
+fn part2(almanac: &Almanac) -> i64 {
+    let count: i64 = almanac
+        .seeds
+        .windows(2).step_by(2)
+        .map(|window| {
+            let [start, count] = *window else { unreachable!() };
+            count
+        })
+        .sum();
+    dbg!(count);
+    almanac
+        .seeds
+        .windows(2).step_by(2)
+        .filter_map(|window| {
+            let [start, count] = *window else { unreachable!() };
+            (start..(start+count)).map(|idx| {
+                almanac.chain_lookup("seed", idx, "location")
+            }).min()
+        })
+        .min().unwrap()
 }
 
-mod parsing {
+pub mod parsing {
     use super::*;
     use nom::bytes::complete::tag;
     use nom::character::complete::{alpha1, space1, i64};
