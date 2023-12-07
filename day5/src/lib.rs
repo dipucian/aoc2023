@@ -71,6 +71,67 @@ mod tests {
         let arr = [1, 2, 3, 4];
         assert_eq!(arr.windows(2).step_by(2).collect::<Vec<_>>(), vec![&[1, 2], &[3, 4]]);
     }
+
+    fn assert_equivalent(mapping: &Mapping, mappings: &Vec<Mapping>, from: &str, to: &str) {
+        (0..100).for_each(|idx|
+            assert_eq!(mapping.apply(idx), Almanac::chain_lookup_with(mappings, from, idx, to), "idx={}", idx)
+        );
+    }
+
+    #[test]
+    fn test_mapping_simple() {
+        let a_to_b = Mapping {
+            from: "A".to_string(),
+            to: "B".to_string(),
+            sections: vec![
+                Section { destination_start: 10, source_start: 0, size: 10 },
+                Section { destination_start: 0, source_start: 10, size: 10 },
+            ]
+        };
+        let identity = Mapping {
+            from: "B".to_string(),
+            to: "C".to_string(),
+            sections: vec![]
+        };
+
+        assert_equivalent(&a_to_b.combine(&identity), &vec![a_to_b, identity], "A", "C");
+    }
+
+    #[test]
+    fn test_mapping_combine() {
+        let input = include_str!("testcase1.txt");
+        let almanac = parsing::parse_almanac(input).unwrap().1;
+        let seed_to_soil = almanac.mappings.iter().find(|mapping| mapping.from == "seed").unwrap();
+        let soil_to_fertilizer = almanac.mappings.iter().find(|mapping| mapping.from == "soil").unwrap();
+        /*
+        seed-to-soil map:
+        0 0 50          // 0 -> 0, 1 -> 1, 2 -> 2 ... 49 -> 49
+        52 50 48        // 50 -> 52, 51 -> 53, 52 -> 54 ... 96 -> 98, 97 -> 99
+        50 98 2         // 98 -> 50, 99 -> 51
+
+        soil-to-fertilizer map:
+        39 0 15         // 0 -> 39, 1 -> 40, 2 -> 41 ... 14 -> 53
+        0 15 37         // 15 -> 0, 16 -> 1, 17 -> 2 ... 51 -> 36
+        37 52 2         // 52 -> 37, 53 -> 38
+
+        seed-to-fertilizer map:
+        39 0 15         // 0 -> 39, 1 -> 40, 2 -> 41 ... 14 -> 53
+        0 15 35         // 15 -> 0, 16 -> 1, 17 -> 2 ... 49 -> 34
+        37 50 2         // 50 -> 37, 51 -> 38
+        52 52 48        // 52 -> 52, 53 -> 53, 54 -> 54 ... 99 -> 99
+         */
+
+        let combined = seed_to_soil.combine(soil_to_fertilizer);
+        dbg!(seed_to_soil, soil_to_fertilizer, &combined);
+
+        assert_eq!(combined.from, "seed");
+        assert_eq!(combined.to, "fertilizer");
+
+        assert_equivalent(&combined, &almanac.mappings, "seed", "fertilizer")
+        // (0..100).for_each(|idx|
+        //     assert_eq!(combined.apply(idx), almanac.chain_lookup("seed", idx, "fertilizer"))
+        // );
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -80,15 +141,19 @@ pub struct Almanac {
 }
 
 impl Almanac {
-    pub fn chain_lookup(&self, from: &str, value: i64, to: &str) -> i64 {
+
+    pub fn chain_lookup_with(mappings: &Vec<Mapping>, from: &str, value: i64, to: &str) -> i64 {
         let mut current_value = value;
         let mut current_type = from;
         while current_type != to {
-            let mapping = self.mappings.iter().find(|mapping| mapping.from == current_type).unwrap();
+            let mapping = mappings.iter().find(|mapping| mapping.from == current_type).unwrap();
             current_value = mapping.apply(current_value);
             current_type = &mapping.to;
         }
         current_value
+    }
+    pub fn chain_lookup(&self, from: &str, value: i64, to: &str) -> i64 {
+        Almanac::chain_lookup_with(&self.mappings, from, value, to)
     }
 }
 
@@ -100,21 +165,100 @@ pub struct Mapping {
 }
 
 impl Mapping {
-    pub fn apply(&self, value: i64) -> i64 {
+
+    fn find_section(&self, value: i64) -> Option<&Section> {
         for section in &self.sections {
             if value >= section.source_start && value < section.source_start + section.size {
-                return section.destination_start + (value - section.source_start)
+                return Some(section)
             }
+        }
+        return None
+    }
+
+    fn find_next_start(sections: &Vec<Section>, value: i64) -> i64 {
+        sections.iter()
+            .find(|section| section.source_start >= value)
+            .map(|section| section.source_start)
+            .unwrap_or(i64::MAX)
+    }
+    pub fn apply(&self, value: i64) -> i64 {
+        if let Some(section) = self.find_section(value) {
+            return section.apply(value)
         }
         return value
     }
+    pub fn combine(&self, other: &Mapping) -> Mapping {
+        assert_eq!(self.to, other.from);
+
+        let mut sections: Vec<Section> = Vec::new();
+        let mut current = 0_i64;
+        let mut debug_count = 0;
+        while current < i64::MAX {
+            if let Some(a_section) = self.find_section(current) {
+                let a_remain = a_section.size_from(current);
+                let b = a_section.apply(current);
+                if let Some(b_section) = other.find_section(b) {
+                    let c = b_section.apply(b);
+                    let b_remain = b_section.size_from(b);
+                    let size = min(a_remain, b_remain);
+                    sections.push(Section { destination_start: c, source_start: current, size });
+                    current += size;
+                } else {
+                    let next_b = Mapping::find_next_start(&other.sections, b);
+                    let size = min(a_remain, next_b - b);
+                    // dbg!(current, a_remain, b, next_b, Section { destination_start: b, source_start: current, size });
+                    sections.push(Section { destination_start: b, source_start: current, size });
+                    current += size;
+                }
+            } else {
+                let next_a = Mapping::find_next_start(&self.sections, current);
+                let a_remain = next_a - current;
+                let b = current;
+                if let Some(b_section) = other.find_section(b) {
+                    let c = b_section.apply(b);
+                    let b_remain = b_section.size_from(b);
+                    let size = min(a_remain, b_remain);
+                    sections.push(Section { destination_start: c, source_start: current, size });
+                    current += size;
+                } else {
+                    let next_b = Mapping::find_next_start(&other.sections, b);
+                    let size = min(a_remain, next_b - b);
+                    // dbg!(current, a_remain, b, next_b, Section { destination_start: b, source_start: current, size });
+                    sections.push(Section { destination_start: b, source_start: current, size });
+                    current += size;
+                }
+            }
+            debug_count += 1;
+            if debug_count > 10 { dbg!(current, "inf loop?"); break; }
+        }
+
+        // if sections[0].source_start != 0 {
+        //     sections.insert(0, Section { destination_start: 0, source_start: 0, size: sections[0].source_start });
+        // }
+
+        Mapping {
+            from: self.from.clone(),
+            to: other.to.clone(),
+            sections: sections
+        }
+    }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Section {
     destination_start: i64,
     source_start: i64,
     size: i64
+}
+
+impl Section {
+    fn apply(&self, value: i64) -> i64 {
+        self.destination_start + (value - self.source_start)
+    }
+
+    pub fn size_from(&self, value: i64) -> i64 {
+        self.size - (value - self.source_start)
+    }
 }
 
 pub mod parsing {
@@ -149,7 +293,10 @@ pub mod parsing {
 
     pub fn parse_almanac(input: &str) -> IResult<&str, Almanac> {
         separated_pair(parse_seeds, tag("\n\n"), parse_mappings)(input)
-            .map(|(remaining, (seeds, mappings))| (remaining, Almanac { seeds, mappings }))
+            .map(|(remaining, (seeds, mut mappings))| {
+                mappings.sort_by_key(|mapping| mapping.from.clone());
+                (remaining, Almanac { seeds, mappings })
+            })
     }
 
     #[cfg(test)]
