@@ -122,15 +122,11 @@ mod tests {
          */
 
         let combined = seed_to_soil.combine(soil_to_fertilizer);
-        dbg!(seed_to_soil, soil_to_fertilizer, &combined);
 
         assert_eq!(combined.from, "seed");
         assert_eq!(combined.to, "fertilizer");
 
         assert_equivalent(&combined, &almanac.mappings, "seed", "fertilizer")
-        // (0..100).for_each(|idx|
-        //     assert_eq!(combined.apply(idx), almanac.chain_lookup("seed", idx, "fertilizer"))
-        // );
     }
 }
 
@@ -175,12 +171,6 @@ impl Mapping {
         return None
     }
 
-    fn find_next_start(sections: &Vec<Section>, value: i64) -> i64 {
-        sections.iter()
-            .find(|section| section.source_start >= value)
-            .map(|section| section.source_start)
-            .unwrap_or(i64::MAX)
-    }
     pub fn apply(&self, value: i64) -> i64 {
         if let Some(section) = self.find_section(value) {
             return section.apply(value)
@@ -192,49 +182,30 @@ impl Mapping {
 
         let mut sections: Vec<Section> = Vec::new();
         let mut current = 0_i64;
-        let mut debug_count = 0;
-        while current < i64::MAX {
-            if let Some(a_section) = self.find_section(current) {
-                let a_remain = a_section.size_from(current);
-                let b = a_section.apply(current);
-                if let Some(b_section) = other.find_section(b) {
-                    let c = b_section.apply(b);
-                    let b_remain = b_section.size_from(b);
-                    let size = min(a_remain, b_remain);
-                    sections.push(Section { destination_start: c, source_start: current, size });
-                    current += size;
-                } else {
-                    let next_b = Mapping::find_next_start(&other.sections, b);
-                    let size = min(a_remain, next_b - b);
-                    // dbg!(current, a_remain, b, next_b, Section { destination_start: b, source_start: current, size });
-                    sections.push(Section { destination_start: b, source_start: current, size });
-                    current += size;
-                }
+
+        fn find_next_start(sections: &Vec<Section>, value: i64) -> i64 {
+            sections.iter()
+                .find(|section| section.source_start >= value)
+                .map(|section| section.source_start)
+                .unwrap_or(i64::MAX)
+        }
+        fn mapped_and_remain(mapping: &Mapping, value: i64) -> (i64, i64) {
+            if let Some(section) = mapping.find_section(value) {
+                (section.apply(value), section.size_from(value))
             } else {
-                let next_a = Mapping::find_next_start(&self.sections, current);
-                let a_remain = next_a - current;
-                let b = current;
-                if let Some(b_section) = other.find_section(b) {
-                    let c = b_section.apply(b);
-                    let b_remain = b_section.size_from(b);
-                    let size = min(a_remain, b_remain);
-                    sections.push(Section { destination_start: c, source_start: current, size });
-                    current += size;
-                } else {
-                    let next_b = Mapping::find_next_start(&other.sections, b);
-                    let size = min(a_remain, next_b - b);
-                    // dbg!(current, a_remain, b, next_b, Section { destination_start: b, source_start: current, size });
-                    sections.push(Section { destination_start: b, source_start: current, size });
-                    current += size;
-                }
+                let next_start = find_next_start(&mapping.sections, value);
+                (value, next_start - value)
             }
-            debug_count += 1;
-            if debug_count > 10 { dbg!(current, "inf loop?"); break; }
         }
 
-        // if sections[0].source_start != 0 {
-        //     sections.insert(0, Section { destination_start: 0, source_start: 0, size: sections[0].source_start });
-        // }
+        while current < i64::MAX {
+            let (b, a_remain) = mapped_and_remain(self, current);
+            let (c, b_remain) = mapped_and_remain(other, b);
+            let size = min(a_remain, b_remain);
+            let new_section = Section { destination_start: c, source_start: current, size };
+            sections.push(new_section);
+            current += size;
+        }
 
         Mapping {
             from: self.from.clone(),
@@ -294,7 +265,7 @@ pub mod parsing {
     pub fn parse_almanac(input: &str) -> IResult<&str, Almanac> {
         separated_pair(parse_seeds, tag("\n\n"), parse_mappings)(input)
             .map(|(remaining, (seeds, mut mappings))| {
-                mappings.sort_by_key(|mapping| mapping.from.clone());
+                mappings.iter_mut().for_each(|mapping| mapping.sections.sort_by_key(|section| section.source_start));
                 (remaining, Almanac { seeds, mappings })
             })
     }
