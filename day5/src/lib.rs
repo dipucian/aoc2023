@@ -1,4 +1,4 @@
-use std::cmp::min;
+use std::cmp::{max, min};
 
 pub fn part1(almanac: &Almanac) -> i64 {
     almanac
@@ -11,18 +11,28 @@ pub fn part2_full(almanac: &Almanac) -> i64 {
     part2(almanac, i64::MAX)
 }
 
-pub fn part2(almanac: &Almanac, limit: i64) -> i64 {
-    almanac
-        .seeds
+pub fn part2(almanac: &Almanac, _limit: i64) -> i64 {
+    fn combine_all(mappings: &Vec<Mapping>) -> Mapping {
+        mappings.iter().skip(1).fold(mappings[0].clone(), |acc, mapping| acc.combine(mapping))
+    }
+
+    let seed_ranges = almanac.seeds
         .windows(2).step_by(2)
-        .filter_map(|window| {
-            let [start, count] = *window else { unreachable!() };
-            let size = min(count, limit);
-            (start..(start+size)).map(|idx| {
-                almanac.chain_lookup("seed", idx, "location")
-            }).min()
+        .map(|window| (window[0], window[1]))
+        .collect::<Vec<_>>();
+
+    let mut combined = combine_all(&almanac.mappings);
+    combined.sections.sort_by_key(|section| section.destination_start);
+    combined.sections.iter().filter_map(|section| {
+        seed_ranges.iter().find_map(|&(start, count)| {
+            if section.source_start < start + count && section.source_start + section.size > start {
+                let intersection_start = max(section.source_start, start);
+                Some(section.apply(intersection_start))
+            } else {
+                None
+            }
         })
-        .min().unwrap()
+    }).min().unwrap()
 }
 
 #[cfg(test)]
@@ -153,7 +163,7 @@ impl Almanac {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Mapping {
     pub from: String,
     to: String,
