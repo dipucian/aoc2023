@@ -14,11 +14,18 @@ pub const INPUT: [Race; 4] = [
     Race { time_limit: 88, record: 1532 },
 ];
 
+const REAL_TESTCASE: Race = Race { time_limit: 71530, record: 940200 };
+pub const REAL_INPUT: Race = Race { time_limit: 53837288, record: 333163512891532 };
+
 pub fn part1(races: &[Race]) -> i64 {
     races.iter()
         .map(|race| race.ways_to_beat_record())
         .reduce(|a, b| a * b)
         .unwrap()
+}
+
+pub fn part2(race: &Race) -> i64 {
+    race.ways_to_beat_record()
 }
 
 #[cfg(test)]
@@ -28,5 +35,10 @@ mod tests {
     #[test]
     fn test_part1() {
         assert_eq!(part1(&TESTCASE), 288);
+    }
+
+    #[test]
+    fn test_part2() {
+        assert_eq!(part2(&REAL_TESTCASE), 71503);
     }
 }
