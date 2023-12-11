@@ -30,7 +30,7 @@ fn parse_hand_and_bid(input: &str) -> IResult<&str, HandAndBid> {
         .map(|(remain, (hand, bid))| (remain, HandAndBid { hand: Hand(hand), bid }))
 }
 
-pub fn parse_file(input: &mut &str) -> Vec<HandAndBid> {
+pub fn parse_file(input: &str) -> Vec<HandAndBid> {
     separated_list1(line_ending, parse_hand_and_bid).parse(input).unwrap().1
 }
 
@@ -40,13 +40,13 @@ mod tests {
 
     #[test]
     fn test_parse_card() {
-        assert_eq!(parse_card(&mut "22").unwrap().1, 2);
-        assert_eq!(parse_card(&mut "T").unwrap().1, 10);
-        assert_eq!(parse_card(&mut "A").unwrap().1, 14);
+        assert_eq!(parse_card("22").unwrap().1, 2);
+        assert_eq!(parse_card("T").unwrap().1, 10);
+        assert_eq!(parse_card("A").unwrap().1, 14);
     }
 
     #[test]
     fn test_parse_hand_and_bid() {
-        assert_eq!(parse_hand_and_bid(&mut "23456 123").unwrap().1, HandAndBid { hand: Hand(vec![2, 3, 4, 5, 6]), bid: 123 });
+        assert_eq!(parse_hand_and_bid("23456 123").unwrap().1, HandAndBid { hand: Hand(vec![2, 3, 4, 5, 6]), bid: 123 });
     }
 }
