@@ -9,6 +9,7 @@ use crate::{Hand, HandAndBid};
 
 fn parse_card(input: &str) -> IResult<&str, u8> {
     alt((
+        value(1, tag("1")),
         value(2, tag("2")),
         value(3, tag("3")),
         value(4, tag("4")),

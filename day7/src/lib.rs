@@ -43,10 +43,17 @@ impl Hand {
         for &card in &self.0 {
             counts[card as usize] += 1;
         }
-        // let mut counts = counts.iter().enumerate().filter(|(_, &count)| count > 0).collect::<Vec<_>>();
-        // counts.sort_by_key(|&(_, count)| -count);
-        counts.sort_by_key(|&count| -count);
-        let counts = counts.iter().filter(|&&count| count > 0).collect::<Vec<_>>();
+
+        let joker_count = counts[1];
+        if joker_count == 5 { return HandType::FiveOfAKind }
+
+        let mut counts = counts.into_iter()
+            .skip(2)
+            .filter(|&count| count > 0)
+            .collect::<Vec<_>>();
+        counts.sort_by_key(|count| -count);
+        counts[0] += joker_count;
+
         match counts.as_slice() {
             [5] => HandType::FiveOfAKind,
             [4, 1] => HandType::FourOfAKind,
@@ -60,12 +67,17 @@ impl Hand {
 }
 
 pub fn part1(input: &mut [HandAndBid]) -> i64 {
-    dbg!(&input);
     input.sort_by_key(|x| x.hand.strength());
     input
         .iter().enumerate()
         .map(|(i, x)| x.bid as i64 * (i+1) as i64)
         .sum()
+}
+
+pub fn part2(input: &str) -> i64 {
+    let input = input.replace('J', "1");
+    let mut input = parsing::parse_file(&input);
+    part1(&mut input)
 }
 
 #[cfg(test)]
@@ -82,5 +94,16 @@ QQQJA 483
 ";
         let mut input = parsing::parse_file(input_text);
         assert_eq!(part1(&mut input), 6440);
+    }
+
+    #[test]
+    fn test_part2() {
+        let input_txt = "32T3K 765
+T55J5 684
+KK677 28
+KTJJT 220
+QQQJA 483
+";
+        assert_eq!(part2(input_txt), 5905);
     }
 }
