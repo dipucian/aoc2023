@@ -12,7 +12,22 @@ pub struct Node {
 
 pub fn part1(input: &str) -> i64 {
     let (steps, nodes) = parsing::parse_file(input);
-    0
+    let mut count = 0;
+    let mut current = find_node(&nodes, "AAA");
+    for step in steps.iter().cycle() {
+        let next = match step {
+            Step::Left => &current.left,
+            Step::Right => &current.right
+        };
+        current = find_node(&nodes, next);
+        count += 1;
+        if current.label == "ZZZ" { break }
+    }
+    count
+}
+
+fn find_node<'a>(nodes: &'a [Node], label: &str) -> &'a Node {
+    nodes.iter().find(|node| node.label == label).unwrap()
 }
 
 #[cfg(test)]
