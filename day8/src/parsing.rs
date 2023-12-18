@@ -1,7 +1,7 @@
 use crate::{Node, Step};
 use nom::branch::alt;
 use nom::bytes::complete::tag;
-use nom::character::complete::{alpha1, line_ending};
+use nom::character::complete::{alphanumeric1, line_ending};
 use nom::combinator::value;
 use nom::multi::{many1, separated_list1};
 use nom::{IResult, Parser};
@@ -9,9 +9,9 @@ use nom::sequence::{delimited, separated_pair};
 
 fn parse_node(input: &str) -> IResult<&str, Node> {
     separated_pair(
-        alpha1, tag(" = "),
+        alphanumeric1, tag(" = "),
         delimited(
-            tag("("), separated_pair(alpha1, tag(", "), alpha1), tag(")"),
+            tag("("), separated_pair(alphanumeric1, tag(", "), alphanumeric1), tag(")"),
         ),
     )(input).map(|(remain, (label, (x, y)))|
         (remain,
