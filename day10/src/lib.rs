@@ -1,4 +1,5 @@
-use std::str::Chars;
+use std::collections::HashSet;
+use std::ops::DerefMut;
 use crate::Direction::*;
 
 pub fn part1(input: &str) -> usize {
@@ -9,18 +10,15 @@ pub fn part1(input: &str) -> usize {
     let mut pos = start;
     let mut steps = 0;
     loop {
-        let from = pos;
-        pos = pos.dir(&direction);
+        pos = pos.dir(&direction).unwrap();
         steps += 1;
 
         let next_tile = at(&grid, &pos).unwrap();
-        // println!("{}: {:?} -- {:?} -> {:?} @ {:?}", steps, from, direction, next_tile as char, pos);
         if next_tile == b'S' {
             break;
         }
         direction = travelling(&direction, next_tile);
     }
-    // dbg!(steps);
     steps / 2
 }
 
@@ -42,9 +40,9 @@ fn travelling(towards: &Direction, tile: u8) -> Direction {
     }
 }
 
-type Grid<'a> = Vec<&'a [u8]>;
+type Grid = Vec<Vec<u8>>;
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 struct Pos {
     row: usize,
     col: usize,
@@ -66,12 +64,12 @@ impl Pos {
         Pos { row: self.row, col: self.col - 1 }
     }
 
-    fn dir(&self, dir: &Direction) -> Pos {
+    fn dir(&self, dir: &Direction) -> Option<Pos> {
         match dir {
-            Direction::North => self.north(),
-            Direction::East => self.east(),
-            Direction::South => self.south(),
-            Direction::West => self.west(),
+            North => if self.row > 0 { Some(self.north()) } else { None },
+            East => Some(self.east()),
+            South => Some(self.south()),
+            West => if self.col > 0 { Some(self.west()) } else { None },
         }
     }
 }
@@ -86,12 +84,12 @@ enum Direction {
 
 fn as_bytes(input: &str) -> Grid {
     input.lines()
-        .map(|s| s.as_bytes())
+        .map(|s| s.as_bytes().to_vec())
         .collect::<Vec<_>>()
 }
 
 fn at(grid: &Grid, pos: &Pos) -> Option<u8> {
-    return if pos.row >= 0 && pos.row < grid.len() && pos.col >= 0 && pos.col < grid[pos.row].len() {
+    if pos.row < grid.len() && pos.col < grid[pos.row].len() {
         Some(grid[pos.row][pos.col])
     } else {
         None
@@ -100,7 +98,7 @@ fn at(grid: &Grid, pos: &Pos) -> Option<u8> {
 
 fn find_start(arr: &Grid) -> Pos {
     arr.iter().enumerate()
-        .filter_map(|(row, &line)|
+        .filter_map(|(row, line)|
             line.iter()
                 .position(|&c| c == b'S')
                 .map(|col| Pos { row, col })
@@ -108,10 +106,6 @@ fn find_start(arr: &Grid) -> Pos {
 }
 
 fn find_connected(grid: &Grid, pos: &Pos) -> Direction {
-    // North => 7, F, |
-    // East => J, 7, -
-    // South => J, L, |
-    // West => L, F, -
     [
         (North, [b'7', b'F', b'|']),
         (East, [b'J', b'7', b'-']),
@@ -119,13 +113,114 @@ fn find_connected(grid: &Grid, pos: &Pos) -> Direction {
         (West, [b'L', b'F', b'-']),
     ].into_iter()
         .find(|(dir, targets)| {
-            let cell = pos.dir(dir);
-            at(grid, &cell).filter(|c| targets.contains(c)).is_some()
+            pos.dir(dir).map(|cell| {
+                at(grid, &cell).filter(|c| targets.contains(c)).is_some()
+            }).unwrap_or(false)
         }).unwrap().0
 }
 
-pub fn part2(input: &str) -> usize {
-    0
+const EMPTY: u8 = b'.';
+
+pub fn part2(input: &str) -> i32 {
+    let mut grid = as_bytes(input);
+    let start = find_start(&grid);
+    let mut direction = find_connected(&grid, &start);
+
+    let mut loop_pos: HashSet<Pos> = HashSet::new();
+
+    let mut pos = start;
+    loop {
+        pos = pos.dir(&direction).unwrap();
+
+        let next_tile = at(&grid, &pos).unwrap();
+        loop_pos.insert(pos);
+        if next_tile == b'S' {
+            break;
+        }
+        direction = travelling(&direction, next_tile);
+    }
+    for row in 0..grid.len() {
+        for col in 0..grid[row].len() {
+            let pos = Pos {row, col};
+            if !loop_pos.contains(&pos) {
+                mark_pos(&mut grid, &pos, EMPTY);
+            }
+        }
+    }
+
+    // print the grid
+    grid.iter().for_each(|line| {
+        println!("{}", line.iter().map(|&c| c as char).collect::<String>());
+    });
+
+    grid.iter().map(|line| {
+        parsing::parse_line(line) as i32
+    }).sum()
+}
+
+fn mark_pos(grid: &mut Grid, pos: &Pos, target: u8) {
+    grid.deref_mut()[pos.row].deref_mut()[pos.col] = target;
+}
+
+mod parsing {
+    use std::str::from_utf8;
+    use nom::branch::alt;
+    use nom::bytes::complete::tag;
+    use nom::IResult;
+    use nom::multi::{fold_many1, many0, many1_count};
+    use nom::sequence::separated_pair;
+
+    enum Section {
+        Wall,
+        Area(usize),
+        WallEnd,
+    }
+    struct State {
+        inside: bool,
+        count: usize,
+    }
+
+    pub fn parse_line(line: &[u8]) -> u8 {
+        fn south_to_north(input: &str) -> IResult<&str, Section> {
+            separated_pair(tag("F"), many0(tag("-")), tag("J"))(input)
+                .map(|(remain, _)| (remain, Section::Wall))
+        }
+        fn north_to_south(input: &str) -> IResult<&str, Section> {
+            separated_pair(tag("L"), many0(tag("-")), tag("7"))(input)
+                .map(|(remain, _)| (remain, Section::Wall))
+        }
+        fn straight(input: &str) -> IResult<&str, Section> {
+            tag("|")(input).map(|(remain, _)| (remain, Section::Wall))
+        }
+        fn north_end(input: &str) -> IResult<&str, Section> {
+            separated_pair(tag("L"), many0(tag("-")), tag("J"))(input)
+                .map(|(remain, _)| (remain, Section::WallEnd))
+        }
+        fn south_end(input: &str) -> IResult<&str, Section> {
+            separated_pair(tag("F"), many0(tag("-")), tag("7"))(input)
+                .map(|(remain, _)| (remain, Section::WallEnd))
+        }
+        fn area(input: &str) -> IResult<&str, Section> {
+            many1_count(tag("."))(input)
+                .map(|(remain, count)| (remain, Section::Area(count)))
+        }
+        fn sections(input: &str) -> IResult<&str, Section> {
+            alt((south_to_north, north_to_south, straight, north_end, south_end, area))(input)
+        }
+        fold_many1(
+            sections,
+            || State { inside: false, count: 0 },
+            |mut acc, section| {
+                match section {
+                    Section::Wall => acc.inside = !acc.inside,
+                    Section::WallEnd => { /*do nothing*/ }
+                    Section::Area(count) =>
+                        if acc.inside { acc.count += count }
+                }
+                acc
+            }
+        )(from_utf8(line).unwrap()).unwrap().1.count as u8
+    }
 }
 
 #[cfg(test)]
@@ -138,6 +233,19 @@ mod tests {
 SJLL7
 |F--J
 LJ.LJ
+";
+
+    const TEST_INPUT_2: &str = "\
+FF7FSF7F7F7F7F7F---7
+L|LJ||||||||||||F--J
+FL-7LJLJ||||||LJL-77
+F--JF--7||LJLJ7F7FJ-
+L---JF-JLJ.||-FJLJJ7
+|F|F-JF---7F7-L7L|7|
+|FFJF7L7F-JF7|JL---7
+7-L-JL7||F7|L7F-7F7|
+L.L7LFJ|||||FJL7||LJ
+L7JLJL-JLJLJL--JLJ.L
 ";
 
     #[test]
@@ -153,6 +261,6 @@ LJ.LJ
 
     #[test]
     fn test_part2() {
-        assert_eq!(part2(""), 0);
+        assert_eq!(part2(TEST_INPUT_2), 10);
     }
 }
