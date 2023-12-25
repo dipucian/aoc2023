@@ -1,16 +1,20 @@
 use std::collections::HashSet;
 
 pub fn part1(input: &str) -> usize {
+    common(input, 1)
+}
+
+fn common(input: &str, factor: usize) -> usize {
     let mut galaxies = list_galaxies(input);
     // println!("before");
     // galaxies.iter().for_each(|g| println!("{:?}", g));
-    expand_universe(&mut galaxies);
+    expand_universe(&mut galaxies, factor);
     // println!("after expansion");
     // galaxies.iter().for_each(|g| println!("{:?}", g));
 
     (0..galaxies.len()).flat_map(|i| {
         let a = &galaxies[i];
-        (i+1..galaxies.len()).map(|j| {
+        (i + 1..galaxies.len()).map(|j| {
             let b = &galaxies[j];
             calculate_distance(a, b)
         })
@@ -35,9 +39,9 @@ fn list_galaxies(input: &str) -> Vec<Pos> {
     galaxies
 }
 
-fn expand_universe(galaxies: &mut Vec<Pos>) {
-    let row_expansion = calculate_expansion(galaxies.iter().map(|g| g.row));
-    let col_expansion = calculate_expansion(galaxies.iter().map(|g| g.col));
+fn expand_universe(galaxies: &mut Vec<Pos>, factor: usize) {
+    let row_expansion = calculate_expansion(galaxies.iter().map(|g| g.row), factor);
+    let col_expansion = calculate_expansion(galaxies.iter().map(|g| g.col), factor);
 
     galaxies.iter_mut().for_each(|g| {
         g.row += row_expansion[g.row];
@@ -45,7 +49,7 @@ fn expand_universe(galaxies: &mut Vec<Pos>) {
     });
 }
 
-fn calculate_expansion<I>(positions: I) -> Vec<usize> where I: Iterator<Item=usize> {
+fn calculate_expansion<I>(positions: I, factor: usize) -> Vec<usize> where I: Iterator<Item=usize> {
     let occupied = positions.collect::<HashSet<_>>();
     let &max = occupied.iter().max().unwrap();
     let mut expansion = Vec::new();
@@ -53,7 +57,7 @@ fn calculate_expansion<I>(positions: I) -> Vec<usize> where I: Iterator<Item=usi
     let mut expansion_so_far = 0;
     for i in 1..=max {
         if !occupied.contains(&i) {
-            expansion_so_far += 1;
+            expansion_so_far += 1 * factor;
         }
         expansion[i] = expansion_so_far;
     }
@@ -65,7 +69,7 @@ fn calculate_distance(a: &Pos, b: &Pos) -> usize {
 }
 
 pub fn part2(input: &str) -> usize {
-    0
+    common(input, 1000000-1)
 }
 
 #[cfg(test)]
@@ -90,7 +94,8 @@ mod tests {
     }
 
     #[test]
-    fn test_part2() {
-        assert_eq!(part2(""), 0);
+    fn test_common() {
+        assert_eq!(common(TEST_INPUT, 99), 8410);
+        assert_eq!(common(TEST_INPUT, 9), 1030);
     }
 }
