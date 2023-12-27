@@ -37,7 +37,7 @@ fn possible_configurations(record: Record) -> usize {
     // println!("{}", record);
     if record.counts.len() == 1 {
         let starts = possible_starts(record.counts[0], true, &record.slots);
-        // println!("starts: {:?}", starts);
+        // println!("last starts: {:?}", starts);
         return starts.len();
     }
     let count = record.counts[0];
@@ -50,7 +50,7 @@ fn possible_configurations(record: Record) -> usize {
         .enumerate()
         // to guard splitting continuous block of #s
         .position(|(idx, &b)| idx >= min_hold-1 && b != b'#') {
-        possible_starts(count, false, &record.slots[..record.slots.len() - hold])
+        possible_starts(count, false, &record.slots[..record.slots.len() - hold-1])
     } else { vec![] };
     // println!("starts: {:?}", starts);
 
@@ -145,6 +145,10 @@ mod tests {
         };
     }
     test_configuration!(line961, "#?????????.#? 2,3,1", 5);
+    // test_configuration!(line681, "????????????????? 4,1,1,1,1", 5);
+    test_configuration!(all_5_2, "????? 1,1", 6);
+    test_configuration!(all_5_3, "????? 1,1,1", 1);
+    test_configuration!(all_7_3, "??????? 1,1,1", 10);
 
     #[test]
     fn test_part2() {
