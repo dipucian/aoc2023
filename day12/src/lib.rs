@@ -4,9 +4,12 @@ use std::str::from_utf8;
 pub fn part1(input: &str) -> usize {
     input.lines()
         .map(Record::from_str)
-        .inspect(|r| print!("{}", r))
-        .map(possible_configurations)
-        .inspect(|n| println!(" -> {}", n))
+        .enumerate()
+        .map(|(idx, r)| {
+            let count = possible_configurations(&"".to_owned(), &r);
+            println!("{} -> {}  (line {})", r, count, idx+1);
+            count
+        })
         .sum()
 }
 
@@ -33,11 +36,19 @@ impl std::fmt::Display for Record {
     }
 }
 
-fn possible_configurations(record: Record) -> usize {
-    // println!("{}", record);
+fn possible_configurations(so_far: &String, record: &Record) -> usize {
+    // println!("possible_configurations({}|{})", so_far, record);
     if record.counts.len() == 1 {
         let starts = possible_starts(record.counts[0], true, &record.slots);
         // println!("last starts: {:?}", starts);
+        starts.iter().for_each(|&start| {
+            println!("{}{}{}{}",
+                so_far,
+                ".".repeat(start),
+                "#".repeat(record.counts[0]),
+                ".".repeat(record.slots.len() - start - record.counts[0]),
+            );
+        });
         return starts.len();
     }
     let count = record.counts[0];
@@ -60,24 +71,45 @@ fn possible_configurations(record: Record) -> usize {
             slots: record.slots[(start+count+1)..].to_vec(),
             counts: record.counts[1..].to_vec(),
         };
-        possible_configurations(new_record)
+        let new_so_far = format!(
+            "{}{}{}{}",
+            so_far,
+            ".".repeat(start),
+            "#".repeat(count),
+            "."
+        );
+        possible_configurations(&new_so_far, &new_record)
     }).sum::<usize>()
 }
 
 fn possible_starts(count: usize, must_consume: bool, slots: &[u8]) -> Vec<usize> {
     // println!("possible_starts({}, {:?})", count, from_utf8(slots).unwrap());
-    let slots = if let Some(first_sharp) = slots.iter().position(|&b| b == b'#') {
+    let (start, end) = if let Some(first_sharp) = slots.iter().position(|&b| b == b'#') {
         let start = if must_consume { first_sharp.saturating_sub(count - 1) } else { 0 };
         let end = (first_sharp + count).min(slots.len());
-        &slots[start..end]
+        (start, end)
     } else {
-        slots
+        (0, slots.len())
     };
-    let expanded = iter::once(b'.')
-        .chain(slots.iter().copied())
-        .chain(iter::once(b'.'))
-        .collect::<Vec<_>>();
-    // println!("expanded: {:?}", from_utf8(&expanded).unwrap());
+    // println!("start: {}, end: {}", start, end);
+    // let slots = &slots[start..end];
+
+    let expanded = if end == slots.len() {
+        iter::once(b'.')
+            .chain(slots[start..].iter().copied())
+            .chain(iter::once(b'.'))
+            .collect::<Vec<_>>()
+    } else {
+        iter::once(b'.')
+            .chain(slots[start..=end].iter().copied())
+            .collect::<Vec<_>>()
+    };
+
+    // let expanded = iter::once(b'.')
+    //     .chain(slots.iter().copied())
+    //     .chain(iter::once(b'.'))
+    //     .collect::<Vec<_>>();
+    println!("expanded: {:?}", from_utf8(&expanded).unwrap());
 
     expanded.windows(count + 2)
         .enumerate()
@@ -88,7 +120,7 @@ fn possible_starts(count: usize, must_consume: bool, slots: &[u8]) -> Vec<usize>
             }
             else { false }
         })
-        .map(|(idx, _w)| idx)
+        .map(|(idx, _w)| idx + start)
         .collect()
 }
 
@@ -128,27 +160,37 @@ mod tests {
     #[test]
     fn test_line() {
         let lines = TEST_INPUT.lines().collect::<Vec<_>>();
-        assert_eq!(possible_configurations(Record::from_str(lines[0])), 1);
-        assert_eq!(possible_configurations(Record::from_str(lines[1])), 4);
-        assert_eq!(possible_configurations(Record::from_str(lines[2])), 1);
-        assert_eq!(possible_configurations(Record::from_str(lines[3])), 1);
-        assert_eq!(possible_configurations(Record::from_str(lines[4])), 4);
-        assert_eq!(possible_configurations(Record::from_str(lines[5])), 10);
+        assert_eq!(possible_configurations(&"".to_owned(), &Record::from_str(lines[0])), 1);
+        assert_eq!(possible_configurations(&"".to_owned(), &Record::from_str(lines[1])), 4);
+        assert_eq!(possible_configurations(&"".to_owned(), &Record::from_str(lines[2])), 1);
+        assert_eq!(possible_configurations(&"".to_owned(), &Record::from_str(lines[3])), 1);
+        assert_eq!(possible_configurations(&"".to_owned(), &Record::from_str(lines[4])), 4);
+        assert_eq!(possible_configurations(&"".to_owned(), &Record::from_str(lines[5])), 10);
     }
 
     macro_rules! test_configuration {
         ($name: ident, $line: expr, $answer: expr) => {
             #[test]
             fn $name() {
-                assert_eq!(possible_configurations(Record::from_str($line)), $answer);
+                let record = &Record::from_str($line);
+                println!("{}", record);
+                assert_eq!(possible_configurations(&"".to_owned(), record), $answer);
             }
         };
     }
     test_configuration!(line961, "#?????????.#? 2,3,1", 5);
-    // test_configuration!(line681, "????????????????? 4,1,1,1,1", 5);
+    test_configuration!(line985, "???????##??#?.?#?#?? 1,9,2,1", 5);
+    test_configuration!(line985_subcase, ".?#?#?? 2,1", 1);
+
     test_configuration!(all_5_2, "????? 1,1", 6);
     test_configuration!(all_5_3, "????? 1,1,1", 1);
     test_configuration!(all_7_3, "??????? 1,1,1", 10);
+    test_configuration!(line477, "?.????#..??#? 1,1,2,3", 4);
+
+    #[test]
+    fn test_possible_start() {
+        assert_eq!(possible_starts(1, true, b"???.#?"), vec![4]);
+    }
 
     #[test]
     fn test_part2() {
