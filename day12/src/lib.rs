@@ -86,6 +86,11 @@ fn possible_starts(count: usize, must_consume: bool, slots: &[u8]) -> Vec<usize>
     } else {
         (0, slots.len())
     };
+    if let Some(last_hash) = slots.iter().rposition(|&b| b == b'#') {
+        if must_consume && last_hash >= end {
+            return vec![];
+        }
+    }
     // println!("start: {}, end: {}", start, end);
 
     let expanded = if end == slots.len() {
@@ -131,6 +136,8 @@ pub fn part2(input: &str) -> usize {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+    use itertools::Itertools;
     use super::*;
 
     const TEST_INPUT: &str = "\
@@ -163,7 +170,7 @@ mod tests {
     test_configuration!(test_line4, "????.#...#... 4,1,1", 1);
     test_configuration!(test_line5, "????.######..#####. 1,6,5", 4);
     test_configuration!(test_line6, "?###???????? 3,2,1", 10);
-    
+
     test_configuration!(line961, "#?????????.#? 2,3,1", 5);
     test_configuration!(line985, "???????##??#?.?#?#?? 1,9,2,1", 5);
     test_configuration!(line985_subcase, ".?#?#?? 2,1", 1);
@@ -172,6 +179,54 @@ mod tests {
     test_configuration!(all_5_3, "????? 1,1,1", 1);
     test_configuration!(all_7_3, "??????? 1,1,1", 10);
     test_configuration!(line477, "?.????#..??#? 1,1,2,3", 4);
+
+    macro_rules! acceptance {
+        ($name: ident, $line: expr) => {
+            #[test]
+            fn $name() {
+                let record = &Record::from_str($line);
+                println!("{}", record);
+                let configs = possible_configurations(record);
+                configs.iter().foreach(|c| println!("{}", c));
+                assert_unique(&configs);
+                assert_dot_and_hash_preserved(record, &configs);
+            }
+        };
+    }
+
+    acceptance!(acceptance_line22, ".?#?#.?????#?.#? 4,1,2,2");
+    acceptance!(acceptance_line160, "##?.??#?#? 2,3");
+
+    fn assert_unique(configs: &[String]) {
+        let mut unique = configs.to_vec();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(unique.len(), configs.len());
+    }
+    fn assert_dot_and_hash_preserved(record: &Record, configs: &[String]) {
+        let dot_positions = record.slots.iter().positions(|&b| b == b'.').collect::<HashSet<_>>();
+        let hash_positions = record.slots.iter().positions(|&b| b == b'#').collect::<HashSet<_>>();
+        // config should have dots and hashes in the same positions, but other positions can be different
+        for config in configs {
+            let config = config.as_bytes();
+            let config_dot_positions = config.iter().positions(|&b| b == b'.').collect::<HashSet<_>>();
+            let config_hash_positions = config.iter().positions(|&b| b == b'#').collect::<HashSet<_>>();
+            assert!(config_dot_positions.is_superset(&dot_positions));
+            assert!(config_hash_positions.is_superset(&hash_positions));
+        }
+    }
+
+    #[test]
+    fn acceptance_test_all() {
+        let input = include_str!("input.txt");
+        for (idx, line) in input.lines().enumerate() {
+            let record = &Record::from_str(line);
+            println!("line {}:  {}", idx+1, record);
+            let configs = possible_configurations(record);
+            assert_unique(&configs);
+            assert_dot_and_hash_preserved(record, &configs);
+        }
+    }
 
     #[test]
     fn test_possible_start() {
