@@ -4,11 +4,20 @@ use std::str::from_utf8;
 pub fn part1(input: &str) -> usize {
     input.lines()
         .map(Record::from_str)
-        .enumerate()
-        .map(|(idx, r)| {
-            let count = possible_configurations(&r).len();
-            println!("{} -> {}  (line {})", r, count, idx+1);
-            count
+        .map(|r| {
+            possible_configurations(&r).len()
+        })
+        .sum()
+}
+
+pub fn part2(input: &str) -> usize {
+    input.lines()
+        .map(Record::from_str)
+        .inspect(|r| println!("{}", r))
+        .map(Record::unfold)
+        .inspect(|r| println!("{}", r))
+        .map(|r| {
+            possible_configurations(&r).len()
         })
         .sum()
 }
@@ -26,18 +35,28 @@ impl Record {
             counts: parts[1].split(',').map(|s| s.parse().unwrap()).collect(),
         }
     }
+
+    fn unfold(mut self) -> Self {
+        self.counts = self.counts.repeat(5);
+
+        self.slots.push(b'?');
+        self.slots = self.slots.repeat(5);
+        self.slots.pop();
+
+        self
+    }
 }
 
 impl std::fmt::Display for Record {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let slots = self.slots.iter().map(|&b| b as char).collect::<String>();
+        let slots = from_utf8(&self.slots).unwrap();
         let counts = self.counts.iter().map(|&n| n.to_string()).collect::<Vec<_>>().join(",");
         write!(f, "{} {}", slots, counts)
     }
 }
 
 fn possible_configurations(record: &Record) -> Vec<String> {
-    // println!("possible_configurations({}|{})", so_far, record);
+    // println!("possible_configurations({})", record);
     if record.counts.len() == 1 {
         let starts = possible_starts(record.counts[0], true, &record.slots);
         // println!("last starts: {:?}", starts);
@@ -130,10 +149,6 @@ fn could_be_empty(slot: &u8) -> bool {
     *slot == b'?' || *slot == b'.'
 }
 
-pub fn part2(input: &str) -> usize {
-    0
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
@@ -187,7 +202,7 @@ mod tests {
                 let record = &Record::from_str($line);
                 println!("{}", record);
                 let configs = possible_configurations(record);
-                configs.iter().foreach(|c| println!("{}", c));
+                configs.iter().for_each(|c| println!("{}", c));
                 assert_unique(&configs);
                 assert_dot_and_hash_preserved(record, &configs);
             }
@@ -235,6 +250,6 @@ mod tests {
 
     #[test]
     fn test_part2() {
-        assert_eq!(part2(""), 0);
+        assert_eq!(part2(TEST_INPUT), 525152);
     }
 }
