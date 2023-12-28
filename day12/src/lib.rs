@@ -6,7 +6,7 @@ pub fn part1(input: &str) -> usize {
         .map(Record::from_str)
         .enumerate()
         .map(|(idx, r)| {
-            let count = possible_configurations(&"".to_owned(), &r);
+            let count = possible_configurations(&r).len();
             println!("{} -> {}  (line {})", r, count, idx+1);
             count
         })
@@ -36,20 +36,17 @@ impl std::fmt::Display for Record {
     }
 }
 
-fn possible_configurations(so_far: &String, record: &Record) -> usize {
+fn possible_configurations(record: &Record) -> Vec<String> {
     // println!("possible_configurations({}|{})", so_far, record);
     if record.counts.len() == 1 {
         let starts = possible_starts(record.counts[0], true, &record.slots);
         // println!("last starts: {:?}", starts);
-        starts.iter().for_each(|&start| {
-            println!("{}{}{}{}",
-                so_far,
-                ".".repeat(start),
-                "#".repeat(record.counts[0]),
-                ".".repeat(record.slots.len() - start - record.counts[0]),
-            );
-        });
-        return starts.len();
+        return starts.iter().map(|&start| format!(
+            "{}{}{}",
+            ".".repeat(start),
+            "#".repeat(record.counts[0]),
+            ".".repeat(record.slots.len() - start - record.counts[0]),
+        )).collect()
     }
     let count = record.counts[0];
 
@@ -65,21 +62,19 @@ fn possible_configurations(so_far: &String, record: &Record) -> usize {
     } else { vec![] };
     // println!("starts: {:?}", starts);
 
-    // recurse with each leftmost
-    starts.iter().map(|&start| {
+    starts.iter().flat_map(|&start| {
         let new_record = Record {
             slots: record.slots[(start+count+1)..].to_vec(),
             counts: record.counts[1..].to_vec(),
         };
-        let new_so_far = format!(
-            "{}{}{}{}",
-            so_far,
+        let configs = possible_configurations(&new_record);
+        configs.into_iter().map(|c| format!(
+            "{}{}.{}",
             ".".repeat(start),
             "#".repeat(count),
-            "."
-        );
-        possible_configurations(&new_so_far, &new_record)
-    }).sum::<usize>()
+            c
+        )).collect::<Vec<_>>()
+    }).collect()
 }
 
 fn possible_starts(count: usize, must_consume: bool, slots: &[u8]) -> Vec<usize> {
@@ -92,7 +87,6 @@ fn possible_starts(count: usize, must_consume: bool, slots: &[u8]) -> Vec<usize>
         (0, slots.len())
     };
     // println!("start: {}, end: {}", start, end);
-    // let slots = &slots[start..end];
 
     let expanded = if end == slots.len() {
         iter::once(b'.')
@@ -105,11 +99,7 @@ fn possible_starts(count: usize, must_consume: bool, slots: &[u8]) -> Vec<usize>
             .collect::<Vec<_>>()
     };
 
-    // let expanded = iter::once(b'.')
-    //     .chain(slots.iter().copied())
-    //     .chain(iter::once(b'.'))
-    //     .collect::<Vec<_>>();
-    println!("expanded: {:?}", from_utf8(&expanded).unwrap());
+    // println!("expanded: {:?}", from_utf8(&expanded).unwrap());
 
     expanded.windows(count + 2)
         .enumerate()
@@ -157,27 +147,23 @@ mod tests {
         assert_eq!(part1(TEST_INPUT), 21);
     }
 
-    #[test]
-    fn test_line() {
-        let lines = TEST_INPUT.lines().collect::<Vec<_>>();
-        assert_eq!(possible_configurations(&"".to_owned(), &Record::from_str(lines[0])), 1);
-        assert_eq!(possible_configurations(&"".to_owned(), &Record::from_str(lines[1])), 4);
-        assert_eq!(possible_configurations(&"".to_owned(), &Record::from_str(lines[2])), 1);
-        assert_eq!(possible_configurations(&"".to_owned(), &Record::from_str(lines[3])), 1);
-        assert_eq!(possible_configurations(&"".to_owned(), &Record::from_str(lines[4])), 4);
-        assert_eq!(possible_configurations(&"".to_owned(), &Record::from_str(lines[5])), 10);
-    }
-
     macro_rules! test_configuration {
         ($name: ident, $line: expr, $answer: expr) => {
             #[test]
             fn $name() {
                 let record = &Record::from_str($line);
                 println!("{}", record);
-                assert_eq!(possible_configurations(&"".to_owned(), record), $answer);
+                assert_eq!(possible_configurations(record).len(), $answer);
             }
         };
     }
+    test_configuration!(test_line1, "???.### 1,1,3", 1);
+    test_configuration!(test_line2, ".??..??...?##. 1,1,3", 4);
+    test_configuration!(test_line3, "?#?#?#?#?#?#?#? 1,3,1,6", 1);
+    test_configuration!(test_line4, "????.#...#... 4,1,1", 1);
+    test_configuration!(test_line5, "????.######..#####. 1,6,5", 4);
+    test_configuration!(test_line6, "?###???????? 3,2,1", 10);
+    
     test_configuration!(line961, "#?????????.#? 2,3,1", 5);
     test_configuration!(line985, "???????##??#?.?#?#?? 1,9,2,1", 5);
     test_configuration!(line985_subcase, ".?#?#?? 2,1", 1);
