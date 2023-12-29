@@ -109,32 +109,30 @@ fn possible_sub_configurations(offset: usize, record: &Record) -> Vec<Vec<usize>
 }
 
 fn count_configurations(record: &Record) -> usize {
-    let offset = 0;
-    let count = record.counts[0];
-    if record.counts.len() == 1 {
-        return possible_starts(offset, count, true, &record.slots).len();
+    count_configurations_raw(&record.counts, &record.slots)
+}
+fn count_configurations_raw(counts: &[usize], slots: &[u8]) -> usize {
+    let count = counts[0];
+    if counts.len() == 1 {
+        return count_possible_starts(count, true, &slots);
     }
 
-    let min_hold = itertools::intersperse(record.counts.iter(), &1)
+    let min_hold = itertools::intersperse(counts.iter(), &1)
         .skip(1).sum::<usize>();
-    let starts = if let Some(hold) = record.slots
+    let starts = if let Some(hold) = slots
         .iter()
         .rev()
         .enumerate()
         // to guard splitting continuous block of #s
         .position(|(idx, &b)| idx >= min_hold-1 && b != b'#') {
 
-        possible_starts(offset, count, false, &record.slots[..record.slots.len() - hold-1])
+        possible_starts(0, count, false, &slots[..slots.len() - hold-1])
     } else { vec![] };
     // println!("starts: {:?}", starts);
 
     starts.iter().map(|&start| {
         let local_offset = start + count + 1;
-        let new_record = Record {
-            slots: record.slots[local_offset..].to_vec(),
-            counts: record.counts[1..].to_vec(),
-        };
-        count_configurations(&new_record)
+        count_configurations_raw(&counts[1..], &slots[local_offset..])
     }).sum()
 }
 
@@ -179,6 +177,48 @@ fn possible_starts(offset: usize, count: usize, must_consume: bool, slots: &[u8]
         })
         .map(|(idx, _w)| offset + idx + start)
         .collect()
+}
+
+fn count_possible_starts(count: usize, must_consume: bool, slots: &[u8]) -> usize {
+    let offset = 0;
+    // println!("possible_starts({}, {:?})", count, from_utf8(slots).unwrap());
+    let (start, end) = if let Some(first_sharp) = slots.iter().position(|&b| b == b'#') {
+        let last_sharp = slots.iter().rposition(|&b| b == b'#').unwrap();
+        let start = if must_consume { last_sharp.saturating_sub(count - 1) } else { 0 };
+        let end = (first_sharp + count).min(slots.len());
+        (start, end)
+    } else {
+        (0, slots.len())
+    };
+
+    if end < start {
+        return 0;
+    }
+    // println!("start: {}, end: {}", start, end);
+
+    let expanded = if end == slots.len() {
+        iter::once(b'.')
+            .chain(slots[start..].iter().copied())
+            .chain(iter::once(b'.'))
+            .collect::<Vec<_>>()
+    } else {
+        iter::once(b'.')
+            .chain(slots[start..=end].iter().copied())
+            .collect::<Vec<_>>()
+    };
+
+    // println!("expanded: {:?}", from_utf8(&expanded).unwrap());
+
+    expanded.windows(count + 2)
+        .enumerate()
+        .filter(|(_idx, w)| {
+            // println!("idx: {}: {:?}", _idx, from_utf8(w).unwrap());
+            if let [before, center@ .., after] = w {
+                could_be_empty(before) && could_be_empty(after) && full(center)
+            }
+            else { false }
+        })
+        .count()
 }
 
 fn full(slots: &[u8]) -> bool {
