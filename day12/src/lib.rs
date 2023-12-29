@@ -1,5 +1,6 @@
 use std::iter;
 use std::str::from_utf8;
+use itertools::Itertools;
 
 pub fn part1(input: &str) -> usize {
     input.lines()
@@ -17,7 +18,7 @@ pub fn part2(input: &str) -> usize {
         .map(Record::unfold)
         .inspect(|r| println!("{}", r))
         .map(|r| {
-            possible_configurations(&r).len()
+            possible_sub_configurations(0, &r).len()
         })
         .sum()
 }
@@ -56,18 +57,35 @@ impl std::fmt::Display for Record {
 }
 
 fn possible_configurations(record: &Record) -> Vec<String> {
+    possible_sub_configurations(0, record)
+        .iter().map(|c| {
+        let content = record.counts.iter().zip(c.iter())
+            .map(|(&count, &start)| {
+                format!(
+                    "{}{}",
+                    ".".repeat(start),
+                    "#".repeat(count),
+                )
+            })
+            .join(".");
+        format!("{content:.<width$}", width=record.slots.len())
+    }).collect()
+}
+
+fn possible_sub_configurations(offset: usize, record: &Record) -> Vec<Vec<usize>> {
     // println!("possible_configurations({})", record);
-    if record.counts.len() == 1 {
-        let starts = possible_starts(record.counts[0], true, &record.slots);
-        // println!("last starts: {:?}", starts);
-        return starts.iter().map(|&start| format!(
-            "{}{}{}",
-            ".".repeat(start),
-            "#".repeat(record.counts[0]),
-            ".".repeat(record.slots.len() - start - record.counts[0]),
-        )).collect()
-    }
     let count = record.counts[0];
+    if record.counts.len() == 1 {
+        let starts = possible_starts(offset, count, true, &record.slots);
+        // println!("last starts: {:?}", starts);
+        // return starts.iter().map(|&start| format!(
+        //     "{}{}{}",
+        //     ".".repeat(start),
+        //     "#".repeat(record.counts[0]),
+        //     ".".repeat(record.slots.len() - start - record.counts[0]),
+        // )).collect()
+        return starts.into_iter().map(|start| vec![start]).collect()
+    }
 
     let min_hold = itertools::intersperse(record.counts.iter(), &1)
         .skip(1).sum::<usize>();
@@ -77,26 +95,33 @@ fn possible_configurations(record: &Record) -> Vec<String> {
         .enumerate()
         // to guard splitting continuous block of #s
         .position(|(idx, &b)| idx >= min_hold-1 && b != b'#') {
-        possible_starts(count, false, &record.slots[..record.slots.len() - hold-1])
+
+        possible_starts(offset, count, false, &record.slots[..record.slots.len() - hold-1])
     } else { vec![] };
     // println!("starts: {:?}", starts);
 
     starts.iter().flat_map(|&start| {
+        let local_offset = start + count + 1;
         let new_record = Record {
-            slots: record.slots[(start+count+1)..].to_vec(),
+            slots: record.slots[local_offset..].to_vec(),
             counts: record.counts[1..].to_vec(),
         };
-        let configs = possible_configurations(&new_record);
-        configs.into_iter().map(|c| format!(
-            "{}{}.{}",
-            ".".repeat(start),
-            "#".repeat(count),
+        let configs = possible_sub_configurations(offset + local_offset, &new_record);
+        configs.into_iter().map(|mut c| {
+            c.insert(0, start);
             c
-        )).collect::<Vec<_>>()
+        }).collect::<Vec<_>>()
+        // configs.into_iter().map(|c| format!(
+        //     "{}{}.{}",
+        //     ".".repeat(start),
+        //     "#".repeat(count),
+        //     c
+        // )).collect::<Vec<_>>()
     }).collect()
 }
 
-fn possible_starts(count: usize, must_consume: bool, slots: &[u8]) -> Vec<usize> {
+fn possible_starts(offset: usize, count: usize, must_consume: bool, slots: &[u8]) -> Vec<usize> {
+    let offset = 0;
     // println!("possible_starts({}, {:?})", count, from_utf8(slots).unwrap());
     let (start, end) = if let Some(first_sharp) = slots.iter().position(|&b| b == b'#') {
         let last_sharp = slots.iter().rposition(|&b| b == b'#').unwrap();
@@ -134,7 +159,7 @@ fn possible_starts(count: usize, must_consume: bool, slots: &[u8]) -> Vec<usize>
             }
             else { false }
         })
-        .map(|(idx, _w)| idx + start)
+        .map(|(idx, _w)| offset + idx + start)
         .collect()
 }
 
@@ -221,7 +246,7 @@ mod tests {
     fn assert_dot_and_hash_preserved(record: &Record, configs: &[String]) {
         let dot_positions = record.slots.iter().positions(|&b| b == b'.').collect::<HashSet<_>>();
         let hash_positions = record.slots.iter().positions(|&b| b == b'#').collect::<HashSet<_>>();
-        // config should have dots and hashes in the same positions, but other positions can be different
+
         for config in configs {
             let config = config.as_bytes();
             let config_dot_positions = config.iter().positions(|&b| b == b'.').collect::<HashSet<_>>();
@@ -245,7 +270,7 @@ mod tests {
 
     #[test]
     fn test_possible_start() {
-        assert_eq!(possible_starts(1, true, b"???.#?"), vec![4]);
+        assert_eq!(possible_starts(0, 1, true, b"???.#?"), vec![4]);
     }
 
     #[test]
