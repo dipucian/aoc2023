@@ -18,7 +18,7 @@ pub fn part2(input: &str) -> usize {
         .map(Record::unfold)
         .inspect(|r| println!("{}", r))
         .map(|r| {
-            possible_sub_configurations(0, &r).len()
+            count_configurations(&r)
         })
         .sum()
 }
@@ -78,12 +78,6 @@ fn possible_sub_configurations(offset: usize, record: &Record) -> Vec<Vec<usize>
     if record.counts.len() == 1 {
         let starts = possible_starts(offset, count, true, &record.slots);
         // println!("last starts: {:?}", starts);
-        // return starts.iter().map(|&start| format!(
-        //     "{}{}{}",
-        //     ".".repeat(start),
-        //     "#".repeat(record.counts[0]),
-        //     ".".repeat(record.slots.len() - start - record.counts[0]),
-        // )).collect()
         return starts.into_iter().map(|start| vec![start]).collect()
     }
 
@@ -111,13 +105,37 @@ fn possible_sub_configurations(offset: usize, record: &Record) -> Vec<Vec<usize>
             c.insert(0, start);
             c
         }).collect::<Vec<_>>()
-        // configs.into_iter().map(|c| format!(
-        //     "{}{}.{}",
-        //     ".".repeat(start),
-        //     "#".repeat(count),
-        //     c
-        // )).collect::<Vec<_>>()
     }).collect()
+}
+
+fn count_configurations(record: &Record) -> usize {
+    let offset = 0;
+    let count = record.counts[0];
+    if record.counts.len() == 1 {
+        return possible_starts(offset, count, true, &record.slots).len();
+    }
+
+    let min_hold = itertools::intersperse(record.counts.iter(), &1)
+        .skip(1).sum::<usize>();
+    let starts = if let Some(hold) = record.slots
+        .iter()
+        .rev()
+        .enumerate()
+        // to guard splitting continuous block of #s
+        .position(|(idx, &b)| idx >= min_hold-1 && b != b'#') {
+
+        possible_starts(offset, count, false, &record.slots[..record.slots.len() - hold-1])
+    } else { vec![] };
+    // println!("starts: {:?}", starts);
+
+    starts.iter().map(|&start| {
+        let local_offset = start + count + 1;
+        let new_record = Record {
+            slots: record.slots[local_offset..].to_vec(),
+            counts: record.counts[1..].to_vec(),
+        };
+        count_configurations(&new_record)
+    }).sum()
 }
 
 fn possible_starts(offset: usize, count: usize, must_consume: bool, slots: &[u8]) -> Vec<usize> {
