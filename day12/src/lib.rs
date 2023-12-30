@@ -1,12 +1,17 @@
+mod memoization;
+
+use std::cell::RefCell;
 use std::iter;
 use std::str::from_utf8;
 use itertools::Itertools;
+use memoize::memoize;
+use crate::memoization::Memoization;
 
 pub fn part1(input: &str) -> usize {
     input.lines()
         .map(Record::from_str)
         .map(|r| {
-            possible_configurations(&r).len()
+            possible_configurations(r).len()
         })
         .sum()
 }
@@ -18,12 +23,13 @@ pub fn part2(input: &str) -> usize {
         .map(Record::unfold)
         .inspect(|r| println!("{}", r))
         .map(|r| {
-            count_configurations(&r)
+            possible_configurations(r).len()
+            // count_configurations(&r)
         })
         .sum()
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 struct Record {
     slots: Vec<u8>,
     counts: Vec<usize>,
@@ -56,8 +62,8 @@ impl std::fmt::Display for Record {
     }
 }
 
-fn possible_configurations(record: &Record) -> Vec<String> {
-    possible_sub_configurations(0, record)
+fn possible_configurations(record: Record) -> Vec<String> {
+    possible_sub_configurations(record.clone())
         .iter().map(|c| {
         let content = record.counts.iter().zip(c.iter())
             .map(|(&count, &start)| {
@@ -72,11 +78,12 @@ fn possible_configurations(record: &Record) -> Vec<String> {
     }).collect()
 }
 
-fn possible_sub_configurations(offset: usize, record: &Record) -> Vec<Vec<usize>> {
+#[memoize]
+fn possible_sub_configurations(record: Record) -> Vec<Vec<usize>> {
     // println!("possible_configurations({})", record);
     let count = record.counts[0];
     if record.counts.len() == 1 {
-        let starts = possible_starts(offset, count, true, &record.slots);
+        let starts = possible_starts(count, true, &record.slots);
         // println!("last starts: {:?}", starts);
         return starts.into_iter().map(|start| vec![start]).collect()
     }
@@ -90,7 +97,7 @@ fn possible_sub_configurations(offset: usize, record: &Record) -> Vec<Vec<usize>
         // to guard splitting continuous block of #s
         .position(|(idx, &b)| idx >= min_hold-1 && b != b'#') {
 
-        possible_starts(offset, count, false, &record.slots[..record.slots.len() - hold-1])
+        possible_starts(count, false, &record.slots[..record.slots.len() - hold-1])
     } else { vec![] };
     // println!("starts: {:?}", starts);
 
@@ -100,7 +107,7 @@ fn possible_sub_configurations(offset: usize, record: &Record) -> Vec<Vec<usize>
             slots: record.slots[local_offset..].to_vec(),
             counts: record.counts[1..].to_vec(),
         };
-        let configs = possible_sub_configurations(offset + local_offset, &new_record);
+        let configs = possible_sub_configurations(new_record);
         configs.into_iter().map(|mut c| {
             c.insert(0, start);
             c
@@ -111,6 +118,10 @@ fn possible_sub_configurations(offset: usize, record: &Record) -> Vec<Vec<usize>
 fn count_configurations(record: &Record) -> usize {
     count_configurations_raw(&record.counts, &record.slots)
 }
+fn tupled_count_configurations_raw(t: (&[usize], &[u8])) -> usize {
+    count_configurations_raw(t.0, t.1)
+}
+
 fn count_configurations_raw(counts: &[usize], slots: &[u8]) -> usize {
     let count = counts[0];
     if counts.len() == 1 {
@@ -126,7 +137,7 @@ fn count_configurations_raw(counts: &[usize], slots: &[u8]) -> usize {
         // to guard splitting continuous block of #s
         .position(|(idx, &b)| idx >= min_hold-1 && b != b'#') {
 
-        possible_starts(0, count, false, &slots[..slots.len() - hold-1])
+        possible_starts(count, false, &slots[..slots.len() - hold-1])
     } else { vec![] };
     // println!("starts: {:?}", starts);
 
@@ -136,7 +147,7 @@ fn count_configurations_raw(counts: &[usize], slots: &[u8]) -> usize {
     }).sum()
 }
 
-fn possible_starts(offset: usize, count: usize, must_consume: bool, slots: &[u8]) -> Vec<usize> {
+fn possible_starts(count: usize, must_consume: bool, slots: &[u8]) -> Vec<usize> {
     let offset = 0;
     // println!("possible_starts({}, {:?})", count, from_utf8(slots).unwrap());
     let (start, end) = if let Some(first_sharp) = slots.iter().position(|&b| b == b'#') {
@@ -235,6 +246,7 @@ fn could_be_empty(slot: &u8) -> bool {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
+    use std::fmt::Pointer;
     use itertools::Itertools;
     use super::*;
 
@@ -256,8 +268,8 @@ mod tests {
         ($name: ident, $line: expr, $answer: expr) => {
             #[test]
             fn $name() {
-                let record = &Record::from_str($line);
-                println!("{}", record);
+                let record = Record::from_str($line);
+                println!("{}", &record);
                 assert_eq!(possible_configurations(record).len(), $answer);
             }
         };
@@ -282,12 +294,12 @@ mod tests {
         ($name: ident, $line: expr) => {
             #[test]
             fn $name() {
-                let record = &Record::from_str($line);
-                println!("{}", record);
-                let configs = possible_configurations(record);
+                let record = Record::from_str($line);
+                println!("{}", &record);
+                let configs = possible_configurations(record.clone());
                 configs.iter().for_each(|c| println!("{}", c));
                 assert_unique(&configs);
-                assert_dot_and_hash_preserved(record, &configs);
+                assert_dot_and_hash_preserved(&record, &configs);
             }
         };
     }
@@ -314,13 +326,13 @@ mod tests {
         }
     }
 
-    // #[test]
+    #[test]
     fn acceptance_test_all() {
         let input = include_str!("input.txt");
         for (idx, line) in input.lines().enumerate() {
             let record = &Record::from_str(line);
             println!("line {}:  {}", idx+1, record);
-            let configs = possible_configurations(record);
+            let configs = possible_configurations(record.clone());
             assert_unique(&configs);
             assert_dot_and_hash_preserved(record, &configs);
         }
@@ -328,11 +340,36 @@ mod tests {
 
     #[test]
     fn test_possible_start() {
-        assert_eq!(possible_starts(0, 1, true, b"???.#?"), vec![4]);
+        assert_eq!(possible_starts(1, true, b"???.#?"), vec![4]);
     }
 
     #[test]
     fn test_part2() {
         assert_eq!(part2(TEST_INPUT), 525152);
+    }
+
+    // #[test]
+    fn try_reference_equal() {
+        let v = vec![1, 2, 3, 4, 5];
+
+        let r1 = &v[1..];
+        let r2 = &r1[1..3];
+        let r3 = &v[2..4];
+        let r4 = r2.clone();
+
+        let str = "abc";
+        let string = str.to_string();
+
+        try_clone(str);
+        try_clone(&string);
+
+        println!("{:p} {:p} {:p} {:p}", r1, r2, r3, r4);
+
+        assert_eq!(r3, r2);
+        assert!(false)
+    }
+    fn try_clone<T: Clone + Pointer>(t: T) {
+        let t2 = t.clone();
+        println!("{:p} {:p}", t, t2);
     }
 }
