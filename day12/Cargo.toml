@@ -7,3 +7,11 @@ edition = "2021"
 [dependencies]
 itertools = { workspace = true }
 memoize = "0.4.2"
+criterion = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "bench_day12"
+harness = false

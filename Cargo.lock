@@ -207,6 +207,7 @@ version = "0.1.0"
 name = "day12"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "itertools 0.12.0",
  "memoize",
 ]
