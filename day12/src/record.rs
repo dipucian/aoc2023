@@ -14,6 +14,29 @@ impl Record {
         }
     }
 
+    pub fn tail(&self) -> Record {
+        Record {
+            slots: self.slots.iter()
+                .skip(self.counts[0])
+                .skip_while(|&&c| c == b'#')
+                .skip(1)
+                .cloned().collect(),
+            // slots: self.slots.clone(),
+            counts: self.counts[1..].to_vec(),
+        }
+    }
+
+    pub fn head(&self) -> Record {
+        Record {
+            slots: self.slots.clone(),      // TODO: could be optimized
+            counts: vec![self.counts[0]],
+        }
+    }
+
+    pub fn split(&self) -> (Record, Record) {
+        (self.head(), self.tail())
+    }
+
     pub fn unfold(mut self) -> Self {
         self.counts = self.counts.repeat(5);
 
@@ -22,6 +45,18 @@ impl Record {
         self.slots.pop();
 
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn abc() {
+        let v = vec![1, 2, 3, 4, 5];
+        let re = v.iter().rev().skip(2).rev().skip(1).copied().collect::<Vec<_>>();
+        assert_eq!(re, vec![2, 3]);
     }
 }
 

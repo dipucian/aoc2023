@@ -1,15 +1,18 @@
-mod memoization;
+// mod memoization;
 mod record;
 
 use std::iter;
+use std::str::from_utf8;
 use itertools::Itertools;
 use crate::record::Record;
 
 pub fn part1(input: &str) -> usize {
     input.lines()
         .map(Record::from_str)
+        .inspect(|r| println!("inspect {}", r))
         .map(|r| {
-            possible_configurations(r).len()
+            // possible_configurations(r).len()
+            possible_configuration_count(r)
         })
         .sum()
 }
@@ -17,13 +20,47 @@ pub fn part1(input: &str) -> usize {
 pub fn part2(input: &str) -> usize {
     input.lines()
         .map(Record::from_str)
-        .inspect(|r| println!("{}", r))
+        .inspect(|r| println!("inspect  {}", r))
         .map(Record::unfold)
-        .inspect(|r| println!("{}", r))
+        .inspect(|r| println!("unfolded {}", r))
         .map(|r| {
-            possible_configurations(r).len()
+            possible_configuration_count(r)
         })
+        .inspect(|c| println!("count: {}", c))
         .sum()
+}
+
+fn possible_configuration_count(record: Record) -> usize {
+    let counts = length_and_counts(record);
+    counts.iter().map(|(_len, count)| count).sum()
+}
+
+/*
+return a list of (required_length, possible_configuration_count) in descending order of required_length
+ */
+fn length_and_counts(record: Record) -> Vec<(usize, usize)> {
+    let result = if record.counts.len() == 1 {
+        let starts = possible_ends(record.counts[0], &record.slots);
+        let len = record.slots.len();
+        let start_count = starts.len();
+        starts
+            .into_iter()
+            .enumerate()
+            .map(|(idx, start)| (len - start, 1))
+            .collect()
+    } else {
+        let (first, rest) = record.split();
+        let counts = length_and_counts(rest);
+        let count = first.counts[0];
+        let slot_len = record.slots.len();
+        counts.iter().flat_map(|(required_length, config_counts)| {
+            possible_ends(count, &first.slots[..slot_len-required_length-1])
+                .into_iter()
+                .map(|start| (slot_len - start, *config_counts))
+        }).collect()
+    };
+    println!("{record} -> length_and_counts: {:?}", result);
+    result
 }
 
 fn possible_configurations(record: Record) -> Vec<String> {
@@ -80,7 +117,6 @@ fn possible_sub_configurations(record: Record) -> Vec<Vec<usize>> {
 
 fn possible_starts(count: usize, must_consume: bool, slots: &[u8]) -> Vec<usize> {
     let offset = 0;
-    // println!("possible_starts({}, {:?})", count, from_utf8(slots).unwrap());
     let (start, end) = if let Some(first_sharp) = slots.iter().position(|&b| b == b'#') {
         let last_sharp = slots.iter().rposition(|&b| b == b'#').unwrap();
         let start = if must_consume { last_sharp.saturating_sub(count - 1) } else { 0 };
@@ -89,11 +125,11 @@ fn possible_starts(count: usize, must_consume: bool, slots: &[u8]) -> Vec<usize>
     } else {
         (0, slots.len())
     };
+    // println!("start: {}, end: {}", start, end);
 
     if end < start {
         return vec![];
     }
-    // println!("start: {}, end: {}", start, end);
 
     let expanded = if end == slots.len() {
         iter::once(b'.')
@@ -108,7 +144,7 @@ fn possible_starts(count: usize, must_consume: bool, slots: &[u8]) -> Vec<usize>
 
     // println!("expanded: {:?}", from_utf8(&expanded).unwrap());
 
-    expanded.windows(count + 2)
+    let result = expanded.windows(count + 2)
         .enumerate()
         .filter(|(_idx, w)| {
             // println!("idx: {}: {:?}", _idx, from_utf8(w).unwrap());
@@ -118,7 +154,38 @@ fn possible_starts(count: usize, must_consume: bool, slots: &[u8]) -> Vec<usize>
             else { false }
         })
         .map(|(idx, _w)| offset + idx + start)
-        .collect()
+        .collect();
+    println!("possible_starts({count}, {must_consume}, {:?}) -> {result:?}", from_utf8(slots).unwrap());
+    result
+}
+
+fn possible_ends(count: usize, slots: &[u8]) -> Vec<usize> {
+    let start = slots.iter().rposition(|&b| b == b'#')
+        .map(|last_sharp| last_sharp.saturating_sub(count - 1))
+        .unwrap_or(0);
+
+    let expanded =
+        iter::once(b'.')
+            .chain(slots[start..].iter().copied())
+            .chain(iter::once(b'.'))
+            .collect::<Vec<_>>()
+        ;
+
+    // println!("expanded: {:?}", from_utf8(&expanded).unwrap());
+
+    let result = expanded.windows(count + 2)
+        .enumerate()
+        .filter(|(_idx, w)| {
+            // println!("idx: {}: {:?}", _idx, from_utf8(w).unwrap());
+            if let [before, center@ .., after] = w {
+                could_be_empty(before) && could_be_empty(after) && full(center)
+            }
+            else { false }
+        })
+        .map(|(idx, _w)| idx + start)
+        .collect();
+    // println!("possible_ends({count}, {:?}) -> {result:?}", from_utf8(slots).unwrap());
+    result
 }
 
 fn full(slots: &[u8]) -> bool {
@@ -135,7 +202,6 @@ fn could_be_empty(slot: &u8) -> bool {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
-    use std::fmt::Pointer;
     use itertools::Itertools;
     use super::*;
 
@@ -159,7 +225,7 @@ mod tests {
             fn $name() {
                 let record = Record::from_str($line);
                 println!("{}", &record);
-                assert_eq!(possible_configurations(record).len(), $answer);
+                assert_eq!(possible_configuration_count(record), $answer);
             }
         };
     }
